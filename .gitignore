@@ -1,0 +1,19 @@
+# Maven
+target/
+notification-api-service/target/
+notification-worker-service/target/
+*.log
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# Env files
+.env
+.env.*
