@@ -24,13 +24,33 @@ public class SendGridEmailSender implements NotificationSender {
     @Override
     public void send(Notification notification) throws Exception {
 
+        log.info("🚀 Starting email send for notificationId={}", notification.getId());
+
+        // 🔍 Validate input
         if (notification.getRecipientEmail() == null) {
+            log.error("❌ Recipient email missing for notificationId={}", notification.getId());
             throw new RuntimeException("Recipient email missing");
         }
 
-        Email from = new Email("shashankdw1704@gmail.com");
+        // 🔍 Log important fields
+        String fromEmail = "shashankdw17@gmail.com";
+        String toEmail = notification.getRecipientEmail();
+
+        log.info("📧 FROM = {}", fromEmail);
+        log.info("📧 TO = {}", toEmail);
+        log.info("📝 MESSAGE = {}", notification.getMessage());
+
+        // 🔐 Check API key presence (safe logging)
+        if (apiKey == null || apiKey.isEmpty()) {
+            log.error("❌ SendGrid API key is NULL or EMPTY");
+            throw new RuntimeException("SendGrid API key missing");
+        } else {
+            log.info("🔑 API Key Loaded (starts with): {}", apiKey.substring(0, 5));
+        }
+
+        Email from = new Email(fromEmail, "Notification Service");
         String subject = "Notification";
-        Email to = new Email(notification.getRecipientEmail());
+        Email to = new Email(toEmail);
         Content content = new Content("text/plain", notification.getMessage());
 
         Mail mail = new Mail(from, subject, to, content);
@@ -42,16 +62,37 @@ public class SendGridEmailSender implements NotificationSender {
         request.setEndpoint("mail/send");
         request.setBody(mail.build());
 
+        log.info("📤 Sending request to SendGrid for notificationId={}", notification.getId());
+
         Response response = sg.api(request);
 
         int status = response.getStatusCode();
+        String responseBody = response.getBody();
+        String responseHeaders = response.getHeaders().toString();
 
-        log.info("SendGrid response status={} notificationId={}", status, notification.getId());
+        // 🔍 Full response logging
+        log.info("📥 SendGrid Response Status={} notificationId={}", status, notification.getId());
+        log.debug("📥 SendGrid Response Body={}", responseBody);
+        log.debug("📥 SendGrid Response Headers={}", responseHeaders);
 
-        // 🔥 IMPORTANT: trigger retry if not 2xx
+        // ❌ Handle failures properly
+        if (status == 401 || status == 403) {
+            log.error("❌ AUTH ERROR: Invalid API key or sender not verified. notificationId={}", notification.getId());
+        }
+
+        if (status >= 400 && status < 500) {
+            log.error("❌ CLIENT ERROR: status={} body={} notificationId={}", status, responseBody, notification.getId());
+        }
+
+        if (status >= 500) {
+            log.error("❌ SERVER ERROR: SendGrid internal issue. status={} notificationId={}", status, notification.getId());
+        }
+
+        // 🔥 Throw exception to trigger retry/DLQ
         if (status < 200 || status >= 300) {
-            log.error("SendGrid failed status={} body={}", status, response.getBody());
             throw new RuntimeException("SendGrid failed with status " + status);
         }
+
+        log.info("✅ Email sent successfully for notificationId={}", notification.getId());
     }
 }
